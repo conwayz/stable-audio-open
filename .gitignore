@@ -1,3 +1,5 @@
 .vscode/*
 scratch.ipynb
 outputs/*
+__pycache__
+*.wav
