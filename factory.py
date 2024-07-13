@@ -5,14 +5,11 @@ Creating different components of the model from config.
 import typing as tp
 from typing import Any, Dict
 
-from model import (
-    AudioAutoencoder,
-    AutoencoderPretransform,
-    MultiConditioner,
-    NumberConditioner,
-    OobleckDecoder,
-    T5Conditioner,
-)
+import numpy as np
+
+from conditioners import MultiConditioner, NumberConditioner, T5Conditioner
+from model import ConditionedDiffusionModelWrapper, DiTWrapper
+from pretransforms import AudioAutoencoder, AutoencoderPretransform, OobleckDecoder
 
 """
 Conditioner
@@ -146,3 +143,84 @@ def create_pretransform_from_config(pretransform_config, sample_rate):
     pretransform.eval().requires_grad_(pretransform.enable_grad)
 
     return pretransform
+
+
+"""
+Diffusion
+"""
+
+
+def create_diffusion_cond_from_config(config: tp.Dict[str, tp.Any]):
+
+    model_config = config["model"]
+
+    model_type = config["model_type"]
+
+    diffusion_config = model_config.get("diffusion", None)
+    assert diffusion_config is not None, "Must specify diffusion config"
+
+    diffusion_model_type = diffusion_config.get("type", None)
+    assert diffusion_model_type is not None, "Must specify diffusion model type"
+
+    diffusion_model_config = diffusion_config.get("config", None)
+    assert diffusion_model_config is not None, "Must specify diffusion model config"
+
+    if diffusion_model_type == "dit":
+        diffusion_model = DiTWrapper(**diffusion_model_config)
+
+    io_channels = model_config.get("io_channels", None)
+    assert io_channels is not None, "Must specify io_channels in model config"
+
+    sample_rate = config.get("sample_rate", None)
+    assert sample_rate is not None, "Must specify sample_rate in config"
+
+    diffusion_objective = diffusion_config.get("diffusion_objective", "v")
+
+    conditioning_config = model_config.get("conditioning", None)
+
+    conditioner = None
+    if conditioning_config is not None:
+        conditioner = create_multi_conditioner_from_conditioning_config(
+            conditioning_config
+        )
+
+    cross_attention_ids = diffusion_config.get("cross_attention_cond_ids", [])
+    global_cond_ids = diffusion_config.get("global_cond_ids", [])
+    input_concat_ids = diffusion_config.get("input_concat_ids", [])
+    prepend_cond_ids = diffusion_config.get("prepend_cond_ids", [])
+
+    pretransform = model_config.get("pretransform", None)
+
+    if pretransform is not None:
+        pretransform = create_pretransform_from_config(pretransform, sample_rate)
+        min_input_length = pretransform.downsampling_ratio
+    else:
+        min_input_length = 1
+
+    if diffusion_model_type == "adp_cfg_1d" or diffusion_model_type == "adp_1d":
+        min_input_length *= np.prod(diffusion_model_config["factors"])
+    elif diffusion_model_type == "dit":
+        min_input_length *= diffusion_model.model.patch_size
+
+    # Get the proper wrapper class
+
+    extra_kwargs = {}
+
+    if model_type == "diffusion_cond" or model_type == "diffusion_cond_inpaint":
+        wrapper_fn = ConditionedDiffusionModelWrapper
+
+        extra_kwargs["diffusion_objective"] = diffusion_objective
+
+    return wrapper_fn(
+        diffusion_model,
+        conditioner,
+        min_input_length=min_input_length,
+        sample_rate=sample_rate,
+        cross_attn_cond_ids=cross_attention_ids,
+        global_cond_ids=global_cond_ids,
+        input_concat_ids=input_concat_ids,
+        prepend_cond_ids=prepend_cond_ids,
+        pretransform=pretransform,
+        io_channels=io_channels,
+        **extra_kwargs,
+    )
