@@ -22,7 +22,6 @@ def generate_diffusion_cond(
     init_noise_level: float = 1.0,
     mask_args: dict = None,
     return_latents=False,
-    conditioner_only=False,
     **sampler_kwargs,
 ) -> torch.Tensor:
     """
@@ -81,9 +80,6 @@ def generate_diffusion_cond(
         k: v.type(model_dtype) if v is not None else v
         for k, v in conditioning_inputs.items()
     }
-
-    if conditioner_only:
-        return conditioning_inputs
 
     # Now the generative AI part:
     # k-diffusion denoising process go!

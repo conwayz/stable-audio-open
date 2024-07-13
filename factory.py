@@ -5,8 +5,6 @@ Creating different components of the model from config.
 import typing as tp
 from typing import Any, Dict
 
-import numpy as np
-
 from conditioners import MultiConditioner, NumberConditioner, T5Conditioner
 from model import ConditionedDiffusionModelWrapper, DiTWrapper
 from pretransforms import AudioAutoencoder, AutoencoderPretransform, OobleckDecoder
@@ -197,9 +195,7 @@ def create_diffusion_cond_from_config(config: tp.Dict[str, tp.Any]):
     else:
         min_input_length = 1
 
-    if diffusion_model_type == "adp_cfg_1d" or diffusion_model_type == "adp_1d":
-        min_input_length *= np.prod(diffusion_model_config["factors"])
-    elif diffusion_model_type == "dit":
+    if diffusion_model_type == "dit":
         min_input_length *= diffusion_model.model.patch_size
 
     # Get the proper wrapper class

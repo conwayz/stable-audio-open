@@ -22,16 +22,7 @@ class Pretransform(nn.Module):
 
         self.enable_grad = enable_grad
 
-    def encode(self, x):
-        raise NotImplementedError
-
     def decode(self, z):
-        raise NotImplementedError
-
-    def tokenize(self, x):
-        raise NotImplementedError
-
-    def decode_tokens(self, tokens):
         raise NotImplementedError
 
 
@@ -157,14 +148,9 @@ class SnakeBeta(nn.Module):
         super(SnakeBeta, self).__init__()
         self.in_features = in_features
 
-        # initialize alpha
-        self.alpha_logscale = alpha_logscale
-        if self.alpha_logscale:  # log scale alphas initialized to zeros
-            self.alpha = nn.Parameter(torch.zeros(in_features) * alpha)
-            self.beta = nn.Parameter(torch.zeros(in_features) * alpha)
-        else:  # linear scale alphas initialized to ones
-            self.alpha = nn.Parameter(torch.ones(in_features) * alpha)
-            self.beta = nn.Parameter(torch.ones(in_features) * alpha)
+        # log scale alphas initialized to zeros
+        self.alpha = nn.Parameter(torch.zeros(in_features) * alpha)
+        self.beta = nn.Parameter(torch.zeros(in_features) * alpha)
 
         self.alpha.requires_grad = alpha_trainable
         self.beta.requires_grad = alpha_trainable
@@ -174,11 +160,9 @@ class SnakeBeta(nn.Module):
     def forward(self, x):
         alpha = self.alpha.unsqueeze(0).unsqueeze(-1)  # line up with x to [B, C, T]
         beta = self.beta.unsqueeze(0).unsqueeze(-1)
-        if self.alpha_logscale:
-            alpha = torch.exp(alpha)
-            beta = torch.exp(beta)
+        alpha = torch.exp(alpha)
+        beta = torch.exp(beta)
         x = snake_beta(x, alpha, beta)
-
         return x
 
 
@@ -194,26 +178,13 @@ class DecoderBlock(nn.Module):
     ):
         super().__init__()
 
-        if use_nearest_upsample:
-            upsample_layer = nn.Sequential(
-                nn.Upsample(scale_factor=stride, mode="nearest"),
-                WNConv1d(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    kernel_size=2 * stride,
-                    stride=1,
-                    bias=False,
-                    padding="same",
-                ),
-            )
-        else:
-            upsample_layer = WNConvTranspose1d(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=2 * stride,
-                stride=stride,
-                padding=math.ceil(stride / 2),
-            )
+        upsample_layer = WNConvTranspose1d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=2 * stride,
+            stride=stride,
+            padding=math.ceil(stride / 2),
+        )
 
         self.layers = nn.Sequential(
             SnakeBeta(in_channels),
